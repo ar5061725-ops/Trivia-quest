@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "Trivia Quest",
+    "slug": "trivia-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0F1222",
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {},
+    "web": {},
+    "plugins": [
+      "expo-font"
+    ]
+  }
+}
