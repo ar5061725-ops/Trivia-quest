@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -17,6 +17,7 @@ import HomeScreen from './src/screens/HomeScreen';
 import QuizScreen from './src/screens/QuizScreen';
 import ResultScreen from './src/screens/ResultScreen';
 import LoadingScreen from './src/screens/LoadingScreen';
+import ProblemScreen from './src/screens/ProblemScreen';
 import { fetchQuestions } from './src/api/opentdb';
 import { questionsByCategory } from './src/data/questions';
 import { shuffle } from './src/utils/shuffle';
@@ -33,14 +34,17 @@ function buildGame(categoryId) {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState('home'); // 'home' | 'loading' | 'quiz' | 'result'
+  const [screen, setScreen] = useState('home'); // 'home' | 'loading' | 'problem' | 'quiz' | 'result'
   const [category, setCategory] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [index, setIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [picked, setPicked] = useState(null);
   const [results, setResults] = useState([]);
+  const [problem, setProblem] = useState('error'); // 'error' | 'busy' | 'empty'
+  const [problemKey, setProblemKey] = useState(0); // restarts the problem screen on every new failure
   const attemptRef = useRef(0);
+  const categoryRef = useRef(null);
   const [fontsLoaded] = useFonts({
     Rubik_500Medium,
     Rubik_600SemiBold,
@@ -51,26 +55,37 @@ export default function App() {
   });
 
   // Starts (or restarts) a game in a category — everything goes back to zero.
-  // Tries for fresh questions online first; if that is not possible it plays the built-in set.
-  const startGame = async (cat) => {
-    const attempt = ++attemptRef.current;
-    setCategory(cat);
-    setScreen('loading');
-
-    const fresh = await fetchQuestions(cat.id, QUESTIONS_PER_GAME);
-    if (attempt !== attemptRef.current) return; // cancelled while loading
-
-    setQuestions(
-      fresh
-        ? fresh.map((q) => ({ ...q, answers: shuffle([q.correct_answer, ...q.incorrect_answers]) }))
-        : buildGame(cat.id)
-    );
+  // Begins a game with the given questions — everything goes back to zero.
+  const beginQuiz = (list) => {
+    setQuestions(list);
     setIndex(0);
     setScore(0);
     setPicked(null);
     setResults([]);
     setScreen('quiz');
   };
+
+  // Loads fresh questions; shows a loading screen, then the quiz or a friendly problem screen.
+  const startGame = async (cat) => {
+    const attempt = ++attemptRef.current;
+    setCategory(cat);
+    categoryRef.current = cat;
+    setScreen('loading');
+
+    const { status, questions: fresh } = await fetchQuestions(cat.id, QUESTIONS_PER_GAME);
+    if (attempt !== attemptRef.current) return; // cancelled while loading
+
+    if (status === 'ok') {
+      beginQuiz(fresh.map((q) => ({ ...q, answers: shuffle([q.correct_answer, ...q.incorrect_answers]) })));
+    } else {
+      setProblem(status);
+      setProblemKey((k) => k + 1);
+      setScreen('problem');
+    }
+  };
+
+  const retry = useCallback(() => startGame(categoryRef.current), []);
+  const playOffline = () => beginQuiz(buildGame(category.id));
 
   const cancelLoading = () => {
     attemptRef.current++;
@@ -111,6 +126,17 @@ export default function App() {
         {screen === 'home' && <HomeScreen onSelectCategory={startGame} />}
 
         {screen === 'loading' && <LoadingScreen category={category} onCancel={cancelLoading} />}
+
+        {screen === 'problem' && (
+          <ProblemScreen
+            key={problemKey}
+            kind={problem}
+            category={category}
+            onRetry={retry}
+            onPlayOffline={playOffline}
+            onBack={goHome}
+          />
+        )}
 
         {screen === 'quiz' && (
           <QuizScreen
