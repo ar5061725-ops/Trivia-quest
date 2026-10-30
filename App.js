@@ -18,6 +18,7 @@ import QuizScreen from './src/screens/QuizScreen';
 import ResultScreen from './src/screens/ResultScreen';
 import LoadingScreen from './src/screens/LoadingScreen';
 import ProblemScreen from './src/screens/ProblemScreen';
+import AIScreen from './src/screens/AIScreen';
 import { fetchQuestions } from './src/api/opentdb';
 import { questionsByCategory } from './src/data/questions';
 import { shuffle } from './src/utils/shuffle';
@@ -34,7 +35,7 @@ function buildGame(categoryId) {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState('home'); // 'home' | 'loading' | 'problem' | 'quiz' | 'result'
+  const [screen, setScreen] = useState('home'); // 'home' | 'ai' | 'loading' | 'problem' | 'quiz' | 'result'
   const [category, setCategory] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [index, setIndex] = useState(0);
@@ -84,6 +85,16 @@ export default function App() {
     }
   };
 
+  // A custom AI category plays its own 5 questions, reshuffled each time it is replayed.
+  const customRef = useRef([]);
+  const playCustom = (cat, list) => {
+    customRef.current = list;
+    setCategory(cat);
+    beginQuiz(list.map((q) => ({ ...q, answers: shuffle([q.correct_answer, ...q.incorrect_answers]) })));
+  };
+  const handleAICreated = (made) =>
+    playCustom({ id: 'custom', name: made.name, nameAr: made.name, color: colors.accent, custom: true }, made.questions);
+
   const retry = useCallback(() => startGame(categoryRef.current), []);
   const playOffline = () => beginQuiz(buildGame(category.id));
 
@@ -123,7 +134,9 @@ export default function App() {
       <SafeAreaView style={styles.safe}>
         <StatusBar style="light" />
 
-        {screen === 'home' && <HomeScreen onSelectCategory={startGame} />}
+        {screen === 'home' && <HomeScreen onSelectCategory={startGame} onOpenAI={() => setScreen('ai')} />}
+
+        {screen === 'ai' && <AIScreen onCreated={handleAICreated} onBack={goHome} />}
 
         {screen === 'loading' && <LoadingScreen category={category} onCancel={cancelLoading} />}
 
@@ -157,7 +170,7 @@ export default function App() {
             score={score}
             total={questions.length}
             results={results}
-            onPlayAgain={() => startGame(category)}
+            onPlayAgain={() => (category.custom ? playCustom(category, customRef.current) : startGame(category))}
             onChangeCategory={goHome}
           />
         )}
